@@ -149,7 +149,7 @@ const formatDay = (dateString: string): string => {
 	return 'Hari Tidak Valid';
 };
 
-const formatRiskPercentage = (value: number | null | undefined): string => (value || 0).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const formatRiskPercentage = (value: number | null | undefined): string => (value || 0).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const getRiskStyling = (code?: string) => {
 	switch (code) {
 		case 'LOW_MODERATE':
@@ -161,6 +161,40 @@ const getRiskStyling = (code?: string) => {
 		default:
 			return { color: 'slate', icon: <History className="w-full h-full text-white" />, badge: 'bg-slate-100 text-slate-800' };
 	}
+};
+
+const parseCustomDate = (dateString: string): Date | null => {
+	const monthMap: { [key: string]: number } = {
+		Januari: 0,
+		Februari: 1,
+		Maret: 2,
+		April: 3,
+		Mei: 4,
+		Juni: 5,
+		Juli: 6,
+		Agustus: 7,
+		September: 8,
+		Oktober: 9,
+		November: 10,
+		Desember: 11,
+	};
+
+	const parts = dateString.split(' ');
+	if (parts.length !== 3) {
+		const d = new Date(dateString);
+		return !isNaN(d.getTime()) ? d : null;
+	}
+
+	const day = parseInt(parts[0], 10);
+	const monthName = parts[1];
+	const year = parseInt(parts[2], 10);
+	const monthIndex = monthMap[monthName];
+
+	if (isNaN(day) || monthIndex === undefined || isNaN(year)) {
+		return null;
+	}
+
+	return new Date(year, monthIndex, day);
 };
 
 /**
@@ -222,6 +256,11 @@ export default function HealthyControlDashboard() {
 		loadData();
 	}, [token]);
 
+	// check date range debug
+	useEffect(() => {
+		console.log('Date Range:', dateRange);
+	}, [dateRange]);
+
 	const processedData = useMemo(() => {
 		if (!dashboardData) return null;
 		const { assessment_history, graph_data_30_days } = dashboardData;
@@ -243,7 +282,7 @@ export default function HealthyControlDashboard() {
 		const achievements = [];
 		if (total > 0) achievements.push({ icon: Star, title: 'Langkah Pertama' });
 		if (total >= 5) achievements.push({ icon: Award, title: 'Konsisten' });
-		if (dashboardData.program_overview.status === 'completed') achievements.push({ icon: Trophy, title: 'Pemenang Program' });
+		if (dashboardData.program_overview?.status === 'completed') achievements.push({ icon: Trophy, title: 'Pemenang Program' });
 		if (lowest < 20) achievements.push({ icon: Zap, title: 'Risiko Rendah' });
 
 		let baseHistory = assessment_history;
@@ -300,9 +339,13 @@ export default function HealthyControlDashboard() {
 				return record.risk_percentage - predecessor.risk_percentage;
 			};
 
+			const dateA = parseCustomDate(a.date);
+			const dateB = parseCustomDate(b.date);
+			const timeA = dateA ? dateA.getTime() : 0;
+			const timeB = dateB ? dateB.getTime() : 0;
 			switch (sortBy) {
 				case 'date-asc':
-					return new Date(a.date).getTime() - new Date(b.date).getTime();
+					return timeA - timeB;
 				case 'risk-desc':
 					return b.risk_percentage - a.risk_percentage;
 				case 'risk-asc':
@@ -313,7 +356,7 @@ export default function HealthyControlDashboard() {
 					return getRiskChange(b) - getRiskChange(a);
 				case 'date-desc':
 				default:
-					return new Date(b.date).getTime() - new Date(a.date).getTime();
+					return timeB - timeA;
 			}
 		});
 
@@ -470,7 +513,7 @@ export default function HealthyControlDashboard() {
 								setProgramStatusFilter={setProgramStatusFilter}
 							/>
 							<motion.section variants={itemVariants}>
-								<JourneyCalendar history={dashboardData.assessment_history} onDateRangeSelect={handleDateRangeSelect} />
+								<JourneyCalendar history={dashboardData.assessment_history} onDateRangeSelect={handleDateRangeSelect} selectedRange={dateRange} />
 							</motion.section>
 						</aside>
 
@@ -652,7 +695,13 @@ const AdvancedPaginationControls = ({ currentPage, totalCount, pageSize, onPageC
 				}
 
 				return (
-					<Button key={index} variant={pageNumber === currentPage ? 'default' : 'outline'} size="icon" onClick={() => onPageChange(pageNumber as number)} className={pageNumber === currentPage ? 'bg-gradient-to-br from-red-400 via-pink-500 to-red-600 hover:from-red-500 hover:via-pink-600 hover:to-red-700 text-white' : ''}>
+					<Button
+						key={index}
+						variant={pageNumber === currentPage ? 'default' : 'outline'}
+						size="icon"
+						onClick={() => onPageChange(pageNumber as number)}
+						className={pageNumber === currentPage ? 'bg-gradient-to-br from-red-400 via-pink-500 to-red-600 hover:from-red-500 hover:via-pink-600 hover:to-red-700 text-white' : ''}
+					>
 						{pageNumber}
 					</Button>
 				);
@@ -671,7 +720,15 @@ const AdvancedPaginationControls = ({ currentPage, totalCount, pageSize, onPageC
 	);
 };
 
-const JourneyCalendar = ({ history, onDateRangeSelect }: { history: AnalysisRecord[]; onDateRangeSelect: (range: { start: Date | null; end: Date | null }) => void }) => {
+const JourneyCalendar = ({
+	history,
+	onDateRangeSelect,
+	selectedRange,
+}: {
+	history: AnalysisRecord[];
+	onDateRangeSelect: (range: { start: Date | null; end: Date | null }) => void;
+	selectedRange: { start: Date | null; end: Date | null };
+}) => {
 	const [currentDate, setCurrentDate] = useState(new Date());
 	const [startDate, setStartDate] = useState<Date | null>(null);
 	const [hoverDate, setHoverDate] = useState<Date | null>(null);
@@ -681,6 +738,7 @@ const JourneyCalendar = ({ history, onDateRangeSelect }: { history: AnalysisReco
 		if (startDate && clickedDate.getTime() === startDate.getTime()) {
 			onDateRangeSelect({ start: clickedDate, end: clickedDate });
 			setStartDate(null);
+			setHoverDate(null);
 			return;
 		}
 		if (!startDate) {
@@ -692,6 +750,7 @@ const JourneyCalendar = ({ history, onDateRangeSelect }: { history: AnalysisReco
 				onDateRangeSelect({ start: startDate, end: clickedDate });
 			}
 			setStartDate(null);
+			setHoverDate(null);
 		}
 	};
 
@@ -704,8 +763,8 @@ const JourneyCalendar = ({ history, onDateRangeSelect }: { history: AnalysisReco
 	const analysesByDay = useMemo(() => {
 		const map = new Map<number, any>();
 		history.forEach((record) => {
-			const recordDate = new Date(record.date);
-			if (recordDate.getFullYear() === currentDate.getFullYear() && recordDate.getMonth() === currentDate.getMonth()) {
+			const recordDate = parseCustomDate(record.date);
+			if (recordDate && recordDate.getFullYear() === currentDate.getFullYear() && recordDate.getMonth() === currentDate.getMonth()) {
 				map.set(recordDate.getDate(), record);
 			}
 		});
@@ -742,27 +801,29 @@ const JourneyCalendar = ({ history, onDateRangeSelect }: { history: AnalysisReco
 						const hasRecord = !!record;
 
 						let inRange = false;
-						if (startDate && hoverDate) {
-							const start = Math.min(startDate.getTime(), hoverDate.getTime());
-							const end = Math.max(startDate.getTime(), hoverDate.getTime());
+						const rangeStart = selectedRange?.start ?? startDate;
+						const rangeEnd = selectedRange?.end ?? hoverDate;
+						if (rangeStart && rangeEnd) {
+							const start = Math.min(rangeStart.getTime(), rangeEnd.getTime());
+							const end = Math.max(rangeStart.getTime(), rangeEnd.getTime());
 							inRange = date.getTime() >= start && date.getTime() <= end;
 						}
 
-						if (isToday) {
-							return (
-								<div key={day} className="rounded-lg p-0.5 bg-gradient-to-br from-red-400 via-pink-500 to-red-600 hover:from-red-500 hover:via-pink-600 hover:to-red-700">
-									<motion.div
-										whileHover={{ scale: 1.1 }}
-										onMouseEnter={() => setHoverDate(date)}
-										onMouseLeave={() => setHoverDate(null)}
-										onClick={() => handleDayClick(day)}
-										className={`relative h-full w-full flex items-center justify-center rounded-[7px] transition-all text-sm cursor-pointer bg-white text-slate-800`}
-									>
-										{day}
-									</motion.div>
-								</div>
-							);
-						}
+						const dayClasses =
+							// 1. Prioritas tertinggi: Hari yang dipilih sebagai awal rentang
+							startDate?.getTime() === date.getTime()
+								? 'bg-rose-500 text-white'
+								: // 2. Prioritas kedua: Hari yang memiliki data analisis
+								hasRecord
+								? 'bg-gradient-to-br from-red-400 via-pink-500 to-red-600 text-white'
+								: // 3. Prioritas ketiga: Hari yang ada di dalam rentang
+								inRange
+								? 'bg-rose-100'
+								: // 4. Prioritas keempat: Hari ini (diberi cincin/ring)
+								isToday
+								? 'bg-slate-100 ring-2 ring-rose-500 text-slate-900'
+								: // 5. Default: Hari biasa
+								  'bg-slate-100 hover:bg-slate-200';
 
 						return (
 							<motion.div
@@ -771,9 +832,7 @@ const JourneyCalendar = ({ history, onDateRangeSelect }: { history: AnalysisReco
 								onMouseEnter={() => setHoverDate(date)}
 								onMouseLeave={() => setHoverDate(null)}
 								onClick={() => handleDayClick(day)}
-								className={`relative h-10 flex items-center justify-center rounded-lg transition-all text-sm cursor-pointer ${
-									startDate?.getTime() === date.getTime() ? 'bg-rose-500 text-white' : inRange ? 'bg-rose-100' : hasRecord ? 'bg-gradient-to-br from-red-400 via-pink-500 to-red-600  text-white' : 'bg-slate-100 hover:bg-slate-200'
-								}`}
+								className={`relative h-10 flex items-center justify-center rounded-lg transition-all text-sm cursor-pointer ${dayClasses}`}
 							>
 								{day}
 							</motion.div>

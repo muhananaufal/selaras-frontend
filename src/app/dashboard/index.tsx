@@ -138,7 +138,7 @@ export default function HealthyControlDashboard() {
 		const achievements = [];
 		if (total > 0) achievements.push({ icon: Star, title: 'Langkah Pertama' });
 		if (total >= 5) achievements.push({ icon: Award, title: 'Konsisten' });
-		if (dashboardData.program_overview.status === 'completed') achievements.push({ icon: Trophy, title: 'Pemenang Program' });
+		if (dashboardData.program_overview?.status === 'completed') achievements.push({ icon: Trophy, title: 'Pemenang Program' });
 		if (lowest < 20) achievements.push({ icon: Zap, title: 'Risiko Rendah' });
 
 		// Filtering Logic
@@ -314,7 +314,6 @@ export default function HealthyControlDashboard() {
 
 						<aside className="w-full mt-8 lg:mt-0 lg:sticky lg:top-5 space-y-8">
 							<ProgramCard program={program_overview} />
-
 							<SidebarCard title="Statistik Kamu" icon={<BarChart />}>
 								<div className="grid grid-cols-2 gap-4 mb-1">
 									<StatCard icon={<BarChart />} title="Total Analisis" value={summary.total_assessments} />
@@ -473,6 +472,20 @@ const TabButton = ({ label, isActive, onClick }: { label: string; isActive: bool
 );
 
 const ProgramCard = ({ program }: { program: ProgramOverview }) => {
+	if (!program) {
+		return (
+			<motion.section variants={itemVariants}>
+				<SidebarCard title="Program Anda" icon={<HeartPulse className="text-rose-500" />}>
+					<p className="text-slate-600 text-center mb-4">Anda belum memiliki program aktif.</p>
+					<Link to="/dashboard/history" className="w-full">
+						<Button variant="outline" className="w-full cursor-pointer">
+							<Zap size={16} className="mr-2" /> Mulai Analisis Baru
+						</Button>
+					</Link>
+				</SidebarCard>
+			</motion.section>
+		);
+	}
 	const { status, progress, slug, is_active } = program;
 	const current_day_in_program = progress?.current_day_in_program * -1 || 0;
 
